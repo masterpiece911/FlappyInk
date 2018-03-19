@@ -1,0 +1,403 @@
+import pygame
+from pygame.locals import *
+import sys, random, os
+import vector
+
+# INIT CODE ---------------------------////////////////////////////////////////////////////////////
+
+pygame.init()
+screen = pygame.display.set_mode((768, 1024), 0, 32)
+pygame.display.set_caption("Flappy Ink")
+randomizer = random.Random()
+
+obstacleImage  = "obstacle2.png"
+fenceImage = "fences.png"
+cloudImage = "clouds.png"
+cityImage = "cityscape.png"
+groundImage = "bottom.png"
+backgroundImage = "background.png"
+spikeImage = "spike.png"
+spriteImage = "sprite.png"
+spriteHurtImage = "spritehurt.png"
+spriteDeadImage = "spritedead.png"
+titleImage = "titlescreen.png"
+scoreImage = "scores.png"
+
+music = "music.ogg"
+dyingSoundSource = "aua.ogg"
+pointSoundSource = "point.ogg"
+
+pathName = "Assets"
+
+gravity = 0
+velocity = 0
+
+# SPRITE CLASSES ----------------------////////////////////////////////////////////////////////////
+
+# Background objects (for parallax)
+class BackgroundObject(pygame.sprite.Sprite):
+    def __init__(self, x, y, image, speed):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = image
+        self.rect = self.image.get_rect()
+        self.rect.topleft = (x,y)
+        self.speed = speed
+        self.offset = 0.0
+
+    def update(self, time_passed):
+        moved_distance = (time_passed * self.speed) + self.offset
+        moved_r = round(moved_distance)
+        self.offset = moved_distance - moved_r
+        self.rect.left += moved_r
+        if self.rect.right <= 0:
+            self.rect.left = self.rect.width
+
+# Ball obstacles
+class BallObstacle(pygame.sprite.Sprite):
+
+    id = "x"
+    points = 5.0
+
+    def __init__(self, x, y, xV, yV):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load(os.path.join(pathName + os.sep + spikeImage)).convert_alpha()
+        self.image = pygame.transform.rotate(self.image, 360 * randomizer.random())
+        self.rect = self.image.get_rect()
+        self.rect.center = x,y
+        self.mask = pygame.mask.from_surface(self.image)
+        newdirection = vector.Vector(xV, yV)
+        newdirection.normalize()
+        self.direction = newdirection
+        self.offset = 0.0
+
+
+
+    def update(self, time_passed):
+        moved_distance = time_passed * 300 + self.offset
+        moved_r = round(moved_distance)
+        self.offset = moved_distance - moved_r
+        self.rect.topleft = (self.rect.left + self.direction.x * moved_distance, self.rect.top + self.direction.y * moved_distance)
+
+
+        if self.rect.top <= -100 or self.rect.bottom >= 100:
+            self.center = 768, 500
+            self.direction.y *= -1
+
+# Wall obstacles
+class WallObstacle(pygame.sprite.Sprite):
+
+    points = 0.5
+
+    def __init__(self, flipped, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load(os.path.join(pathName + os.sep + obstacleImage)).convert_alpha()
+        self.rect = self.image.get_rect()
+        self.rect.topleft = x,y
+        self.speed = -512
+        self.offset = 0.0
+        self.mask = pygame.mask.from_surface(self.image)
+        if flipped:
+            self.image = pygame.transform.flip(self.image, False, True)
+            self.mask = pygame.mask.from_surface(self.image)
+            self.rect.bottomleft = self.rect.topleft
+            self.rect.top -= 300
+
+    def update(self, time_passed):
+        moved_distance = (time_passed * self.speed) + self.offset
+        moved_r = round(moved_distance)
+        self.offset = moved_distance - moved_r
+        self.rect.left += moved_r
+
+# The player avatar
+class Avatar(pygame.sprite.Sprite):
+    def __init__(self):
+        # Three states: Alive (1), Collide (2) and Dying (3)
+        pygame.sprite.Sprite.__init__(self)
+        self.aliveSprites = load_sliced_sprites(self, 85, 85, spriteImage, True)
+        self.collidingSprites = load_sliced_sprites(self, 85, 85, spriteHurtImage, True)
+        self.dyingSprites = load_sliced_sprites(self, 85, 85, spriteDeadImage, True)
+        self.frames = [self.aliveSprites, self.collidingSprites, self.dyingSprites]
+        self.state = 1
+        self.act_frame = 0
+        self.image = self.frames[self.state][self.act_frame]
+        self.mask = pygame.mask.from_surface(self.image)
+        self.rect = self.image.get_rect()
+        self.rect.center = 150,300
+        self.changeTime = 1.0/15
+        self.time = 0
+
+    def update(self, time_passed):
+    # Code adapted from lesson script. Changes sprite in the spritesheet.
+        self.time += time_passed
+        if self.time > self.changeTime:
+            self.act_frame = (self.act_frame + 1) % len(self.frames[self.state - 1])
+            self.image = self.frames[self.state - 1][self.act_frame]
+            self.time = 0
+
+    def setState(self, state):
+        self.state = state
+        self.time = 0
+
+
+# SPRITESHEET FUNCTIONS ---------------////////////////////////////////////////////////////////////
+
+def load_sliced_sprites(self, w, h, filename, convert):
+    images = []
+    master_image = pygame.image.load(os.path.join(pathName + os.sep + filename))
+    if convert:
+      master_image = master_image.convert_alpha()
+    master_width, master_height = master_image.get_size()
+    for i in xrange(int(master_width/w)):
+        images.append(master_image.subsurface((i*w,0,w,h)))
+    return images
+
+def logisticFunction(x):
+    euler = 2.71828
+    temp1 = euler**(-x)
+    temp2 = temp1 + 1
+    temp3 = 1 / temp2
+    print temp3 - 0.5
+    return temp3 - 0.5
+
+# MAIN CODE ---------------------------////////////////////////////////////////////////////////////
+
+# Four states: Pause(0), Flying(1), Collide(2), Dying(3)
+state = 0
+
+# Sprites in the game
+obstacles = pygame.sprite.Group()
+backgrounds = pygame.sprite.OrderedUpdates()
+grounds = pygame.sprite.Group()
+avatars = pygame.sprite.Group()
+points = pygame.sprite.Group()
+backgroundOrder = []
+avatar = Avatar()
+avatars.add(avatar)
+
+# Background
+backdrop = pygame.image.load(os.path.join(pathName + os.sep + backgroundImage))
+
+# Loading the image files for the background.
+fences = pygame.image.load(os.path.join(pathName + os.sep + fenceImage)).convert_alpha()
+clouds = pygame.image.load(os.path.join(pathName + os.sep + cloudImage)).convert_alpha()
+cityscape = pygame.image.load(os.path.join(pathName + os.sep + cityImage)).convert_alpha()
+ground = pygame.image.load(os.path.join(pathName + os.sep + groundImage)).convert_alpha()
+titleScreen = pygame.image.load(os.path.join(pathName + os.sep + titleImage))
+
+# Creating the background sprites.
+groundObject = BackgroundObject(0, 896, ground, -512)
+groundObject_= BackgroundObject(groundObject.rect.width, groundObject.rect.top, groundObject.image, groundObject.speed)
+fenceObject = BackgroundObject(0, 768, fences, -384)
+fenceObject_= BackgroundObject(fenceObject.rect.width, fenceObject.rect.top, fenceObject.image, fenceObject.speed)
+cityscapeObject = BackgroundObject(0, 544, cityscape, -154)
+cityscapeObject_= BackgroundObject(cityscapeObject.rect.width, cityscapeObject.rect.top, cityscapeObject.image, cityscapeObject.speed)
+cloudObject = BackgroundObject(0, 192, clouds, -20)
+cloudObject_= BackgroundObject(cloudObject.rect.width, cloudObject.rect.top, cloudObject.image, cloudObject.speed)
+
+# Adding the background sprites to the background sprite group.
+# The ground sprite is seperate as it is also an obstacle.
+backgrounds.add(cityscapeObject)
+backgrounds.add(cityscapeObject_)
+backgrounds.add(fenceObject)
+backgrounds.add(fenceObject_)
+backgrounds.add(cloudObject)
+backgrounds.add(cloudObject_)
+grounds.add(groundObject)
+grounds.add(groundObject_)
+
+# Loading sound files
+dyingSound = pygame.mixer.Sound(os.path.join(pathName + os.sep + dyingSoundSource))
+pointSound = pygame.mixer.Sound(os.path.join(pathName + os.sep + pointSoundSource))
+jumpingSounds = []
+counter = 0
+while counter < 6:
+    sound = pygame.mixer.Sound(os.path.join(pathName + os.sep + "woohoo_" + str(counter) + ".ogg"))
+    jumpingSounds.append(sound)
+    counter += 1
+
+#Start the music.
+pygame.mixer.music.load(os.path.join(pathName + os.sep + music))
+pygame.mixer.music.play(-1)
+
+scoreImages = load_sliced_sprites(None, 120, 120, scoreImage, False)
+
+
+# Variables for the main game loop.
+timer = 0
+wallTimer = 0
+ballTimer = 0
+
+wallSpawnTime = 1
+ballSpawnTime = 8
+
+gravity = 2700
+velocity = 0
+jumpvelocity = -1000
+
+score = 0000.0
+
+clock = pygame.time.Clock()
+
+while True:
+    for event in pygame.event.get():
+        if event.type == QUIT:
+            exit()
+        elif event.type == KEYDOWN or event.type == MOUSEBUTTONDOWN:
+            if state == 0:
+                state = 1
+                avatar.setState(1)
+                score = 0
+            elif state == 1:
+                velocity = jumpvelocity
+                jumpingSounds[random.randint(0,5)].play()
+            else:
+                pass
+
+    screen.fill((0,0,0))
+    time_passed = clock.tick() / 1000.0
+    screen.blit(backdrop, backdrop.get_rect())
+    avatar.image = pygame.transform.rotate(avatar.frames[avatar.state][avatar.act_frame], 360 * logisticFunction(0.25*velocity))
+
+    # Four states: Pause(0), Flying(1), Collide(2), Dying(3)
+    if state == 0:
+
+        # Draw Title screen
+        screen.blit(titleScreen, titleScreen.get_rect())
+
+    elif state == 1:
+  
+        # Think all sprites
+        obstacles.update(time_passed)
+        backgrounds.update(time_passed)
+        grounds.update(time_passed)
+        avatar.update(time_passed)
+        # Move Avatar
+        velocity += gravity * time_passed
+        avatar.rect.bottom += int(velocity * time_passed)
+        # Draw Backgrounds and fix rounding errors.
+        if groundObject.rect.center < groundObject_.rect.center:
+            groundObject_.rect.left = groundObject.rect.right
+        else:
+            groundObject.rect.left = groundObject_.rect.right
+        if fenceObject.rect.center < fenceObject_.rect.center:
+            fenceObject_.rect.left = fenceObject.rect.right
+        else:
+            fenceObject.rect.left = fenceObject_.rect.right
+        backgrounds.draw(screen)
+        # Check obstacle collision
+        collided = False
+        obstacles_hit = pygame.sprite.groupcollide(avatars, obstacles, False, False)
+        ground_hit = pygame.sprite.spritecollide(avatar, grounds, False)
+        if len(obstacles_hit.keys() + ground_hit) > 0:
+            if len(ground_hit) > 0:
+                for ground in ground_hit:
+                    if pygame.sprite.collide_mask(avatar, ground) != None:
+                        collided = True
+            else:
+                for obstacle in obstacles_hit[avatar]:
+                    if pygame.sprite.collide_mask(avatar, obstacle) != None:
+                        collided = True
+
+        if avatar.rect.top > 1024 or avatar.rect.top < -500:
+            collided = True
+        # If collided, set state = 2 and Avatar = 2
+        if collided:
+            dyingSound.play() # ouch
+            velocity = 0
+            state = 2
+            avatar.setState(2)
+            timer = 0
+        # Kill off-screen obstacles
+        for obstacle in obstacles:
+            if obstacle.rect.right < 0:
+                obstacle.kill()
+        # Draw Obstacles
+        obstacles.draw(screen)
+        grounds.draw(screen)
+        # Draw Avatar
+        screen.blit(avatar.image, avatar.rect)
+        wallTimer += time_passed
+        ballTimer += time_passed
+        # Spawn new obstacles
+        if wallTimer > wallSpawnTime:
+            y_position = random.randint(310, 880)
+            obstacles.add(WallObstacle(False, 768, y_position))
+            obstacles.add(WallObstacle(True, 768, y_position))
+            wallTimer = 0
+        if ballTimer > ballSpawnTime:
+            y_position = random.randint(300, 724)
+            obstacles.add(BallObstacle(768, y_position, -768, random.randint(-768,768)))
+            ballTimer = 0
+        
+
+        # Check obstacle past avatar
+        for obstacle in obstacles:
+            # If True, Increment points
+            if obstacle.rect.right < avatar.rect.left:
+                if points.has(obstacle):
+                    pass
+                else:
+                    points.add(obstacle)
+                    score += obstacle.points
+                    pointSound.play()
+                    
+    elif state == 2:
+
+        # Think avatar
+        avatar.update(time_passed)
+        # Draw Backgrounds
+        backgrounds.draw(screen)
+        # Draw Obstacles
+        obstacles.draw(screen)
+        grounds.draw(screen)
+        # Draw Avatar
+        screen.blit(avatar.image, avatar.rect)
+        # Check enough time passed
+        timer += time_passed
+        # If passed, set state = 3 and Avatar = 3
+        if timer > 0.5:
+            state = 3
+            avatar.setState(3)
+            velocity = jumpvelocity
+            
+    elif state == 3:
+
+        # Think Avatar
+        avatar.update(time_passed)
+        # Move Avatar
+        velocity += gravity * time_passed
+        avatar.rect.bottom += int(velocity * time_passed)
+        # Draw Backgrounds
+        backgrounds.draw(screen)
+        # Draw Obstacles
+        obstacles.draw(screen)
+        grounds.draw(screen)
+        # Draw Avatar
+        screen.blit(avatar.image, avatar.rect)
+        # Check Avatar out of screen
+        if avatar.rect.top > 1024:
+            avatar.setState(1)
+            avatar.rect.center = 150,300
+            velocity = 0
+            wallTimer = 0
+            ballTimer = 0
+            obstacles.empty()
+            points.empty()
+            state = 0
+
+
+    # Draw Points
+    rScore = int(round(score))
+    iterableScore = map(int, str(rScore))
+    noDigits = len(iterableScore)
+    counter = 0
+
+    x = 758 # Coordinates of the rightmost digit of the score.
+    y = 10 
+    while counter < noDigits:
+        number = iterableScore[noDigits - counter - 1]
+        screen.blit(scoreImages[number], ((x - ((scoreImages[number].get_rect().width * 0.75) * (counter+1.25))), y))
+        counter += 1
+
+    pygame.display.update()
+

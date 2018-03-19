@@ -1,0 +1,114 @@
+import pygame
+from pygame.locals import *
+import sys, random
+import vector
+
+# Main code ---------------------------////////////////////////////////////////////////////////////
+
+pygame.init()
+screen = pygame.display.set_mode(240, 320, 0, 32) #TODO: Set proper screen size
+
+# Variable that checks whether the game has started or not
+# (Paused = True|False)
+paused = True
+
+score = 0
+
+
+w, h = 
+clock = pygame.time.Clock()
+
+# SETUP CODE --------------------------////////////////////////////////////////////////////////////
+
+def setUpGame(self):
+  paused = True
+  score = 0
+  
+
+# SPRITE CLASSES ----------------------////////////////////////////////////////////////////////////
+
+# The player class
+class Avatar(pygame.sprite.Sprite):
+  def _init_(self):
+    # Three states: Alive (0), Collide (1) and Dying (2)
+    pygame.sprite.Sprite._init_(self)
+    self.aliveSprites = load_sliced_sprites() #TODO!
+    self.collidingSprites = load_sliced_sprites() #TODO
+    self.dyingSprites = load_sliced_sprites() #TODO
+    self.frames = [aliveSprites, collidingSprites, dyingSprites]
+    self.rect = self.image.get_rect()
+    self.state = 0
+    self.rect.center = 90,100
+    self.changeTime = 1.0/5 #TODO replace 5 with actual frames per second.
+    self.time = 0
+    
+  def update(self, time_passed)
+    # Code adapted from lesson script. Changes sprite in the spritesheet.
+    self.time += time_passed
+    if self.time > self.changeTime:
+      self.act_frame = (self.act_frame + 1) % len(self.frames[state])
+      self.image = self.frames[state][self.act_frame]
+      self.time
+
+  def setState(self, state)
+    self.state = state
+    self.timer = 0
+
+# Background objects (for parallax)
+class BackgroundObject(pygame.sprite.Sprite):
+  def _init_(self, x, y, image, speed):
+    pygame.sprite.Sprite._init_(self)
+    self.image = image
+    self.rect = self.image.get_rect()
+    self.rect.topleft = x,y
+    self.speed = speed
+      
+  def update(self, time_passed):
+    moved_distance = time_passed * self.speed
+    self.rect.left += moved_distance
+    if self.rect.right < 0:
+      self.rect.left= self.rect.width
+    
+# Wall obstacles
+class WallObstacle(pygame.sprite.Sprite):
+  def _init_(self, flipped, x, y):
+    pygame.sprite.Sprite._init_(self)
+    self.image = image #TODO: import wall obstacle image
+    self.rect = self.image.get_rect()
+    self.rect.topleft = x,y
+    self.speed = speed #TODO: what's the speed?
+    if flipped:
+      self.image = pygame.transform.flip(self.image, False, True)
+      self.rect.bottomleft = self.rect.topleft - 20 #TODO: get exact value for obstacle padding.
+  
+  def update(self, time_passed):
+    moved_distance = time_passed * self.speed
+    self.rect.left += moved_distance
+
+# Ball obstacles
+class BallObstacle(pygame.sprite.Sprite):
+  def _init_(self, x, y, direction):
+    pygame.sprite.Sprite._init_(self)
+    self.image = image #TODO: import ball obstacle image
+    self.rect = self.image.get_rect()
+    self.topleft = x,y
+    self.direction = direction
+    
+  def update(self, time_passed):
+    self.rect.center = self.rect.center + (direction * time_passed)
+    self.image = pygame.transform.rotate(self.image, 20 * time_passed)
+    if top == 0 or top = screen.get_Height:
+      direction.y *= -1
+    
+    
+# SPRITESHEET FUNCTIONS ---------------////////////////////////////////////////////////////////////
+
+#TODO THIS IS JUST COPY PASTED FROM THE LESSON SCRIPT.
+
+def load_sliced_sprites(self, w, h, filename): images = []
+  master_image = pygame.image.load(os.path.join('ressources', filename)).convert_alpha()
+  master_image.set_colorkey((255,0,255))
+  master_width, master_height = master_image.get_size()
+  for i in xrange(int(master_width/w)):
+    images.append(master_image.subsurface((i*w,0,w,h)))
+  return images
